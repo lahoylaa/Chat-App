@@ -44,6 +44,11 @@ class client:
         self.chat_log = scrolledtext.ScrolledText(root, state = 'disabled', wrap = tk.WORD, height = 20)
         self.chat_log.pack(padx = 10, pady = (10, 5), fill = tk.BOTH, expand = True)
 
+        # Set a font that supports emojis (e.g., Segoe UI Emoji on Windows)
+        emoji_font = ("Segoe UI Emoji", 12)  # Adjust size as needed
+        self.chat_log = scrolledtext.ScrolledText(root, state='disabled', wrap=tk.WORD, height=20, font=emoji_font)
+        self.chat_log.pack(padx=10, pady=(10, 5), fill=tk.BOTH, expand=True)
+
         frame = tk.Frame(root)
         frame.pack(padx = 10, pady = (0, 10), fill = tk.X)
 
@@ -57,6 +62,10 @@ class client:
         button = tk.Button(frame, text = "Send", command = self.send_message)
         button.pack(side = tk.RIGHT)
 
+        # Optional: Add an emoji button
+        emoji_button = tk.Button(frame, text="😊", command=self.show_emoji_picker)
+        emoji_button.pack(side=tk.RIGHT, padx=5)
+
         self.running = True
         threading.Thread(target = self.receive_message, daemon = True).start()
 
@@ -65,6 +74,24 @@ class client:
 
         # Tag configuration for clickable URLs
         self.chat_log.tag_config('link', foreground='blue', underline=True)
+
+    def show_emoji_picker(self):
+        """Display a simple emoji picker."""
+        emojis = ["😊", "😂", "👍", "❤️", "😢", "😡", "✨", "🚀"]
+        picker = tk.Toplevel(self.root)
+        picker.title("Emoji Picker")
+        picker.geometry("200x100")
+        for emoji in emojis:
+            btn = tk.Button(picker, text=emoji, font=("Segoe UI Emoji", 14),
+                            command=lambda e=emoji: self.insert_emoji(e))
+            btn.pack(side=tk.LEFT, padx=2, pady=2)
+        picker.transient(self.root)  # Keep picker on top of main window
+        picker.grab_set()  # Make it modal
+
+    def insert_emoji(self, emoji):
+        """Insert the selected emoji into the entry field."""
+        self.entry.insert(tk.END, emoji)
+        self.entry.focus()
 
     def get_local_ip(self):
         """Get the local IP address of the machine."""
@@ -218,7 +245,7 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = client(root)
     root.geometry("680x700")
-    root.resizable(False, False)
+    # root.resizable(False, False)
     root.mainloop()
 
 
