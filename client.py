@@ -5,19 +5,23 @@ import threading
 import re
 import webbrowser
 
+# Add thread
 class client:
     def __init__(self, root, host = '127.0.0.1', port = 5020):
         self.root = root
         self.root.title(f"Chat App Client on Port: {port}")
 
-        # self.server_address = f"{host}:{port}"  # Server IP and Port
-        # self.local_ip = self.get_local_ip()  # Get local machine's IP address
-        # self.root.title(f"Chat App Client - Local IP: {self.local_ip}, Server: {self.server_address}")  # Title with server and local IP
-
-
-        # Username
-        # Run the username prompt in a separate thread
-        # threading.Thread(target=self.get_username, daemon=True).start()
+        # Emoji shortcut dictionary
+        self.emoji_dict = {
+            ":smile:": "😊",
+            ":laugh:": "😂",
+            ":thumbsup:": "👍",
+            ":heart:": "❤️",
+            ":sad:": "😢",
+            ":angry:": "😡",
+            ":sparkles:": "✨",
+            ":rocket:": "🚀"
+        }
 
         # self.username = simpledialog.askstring("Username:", "", parent = self.root)
         self.get_username()
@@ -31,7 +35,6 @@ class client:
         try:
             self.client_socket.connect((host, port))
             self.client_socket.send(self.username.encode()) # Send the name as the first message
-            server_ip, server_addr = self.client_socket.getpeername()
             # print(f"server addr : {server_addr}")
             # self.root.title(f"Chat App Client on Port: {server_addr}")
         except ConnectionRefusedError:
@@ -41,13 +44,9 @@ class client:
         
     
         # User Interface
-        self.chat_log = scrolledtext.ScrolledText(root, state = 'disabled', wrap = tk.WORD, height = 20)
-        self.chat_log.pack(padx = 10, pady = (10, 5), fill = tk.BOTH, expand = True)
-
-        # Set a font that supports emojis (e.g., Segoe UI Emoji on Windows)
         emoji_font = ("Segoe UI Emoji", 12)  # Adjust size as needed
-        self.chat_log = scrolledtext.ScrolledText(root, state='disabled', wrap=tk.WORD, height=20, font=emoji_font)
-        self.chat_log.pack(padx=10, pady=(10, 5), fill=tk.BOTH, expand=True)
+        self.chat_log = scrolledtext.ScrolledText(root, state = 'disabled', wrap = tk.WORD, height = 20, font = emoji_font)
+        self.chat_log.pack(padx = 10, pady = (10, 5), fill = tk.BOTH, expand = True)
 
         frame = tk.Frame(root)
         frame.pack(padx = 10, pady = (0, 10), fill = tk.X)
@@ -56,13 +55,11 @@ class client:
         self.entry.focus()  # Automatically focus the input box after the username prompt.
         self.entry.pack(side = tk.LEFT, fill = tk.X, expand = True, padx = (0, 5))
         self.entry.bind("<Return>", self.send_message)
-        # self.entry.delete(1.0, tk.END)  # Clears the text box
-
 
         button = tk.Button(frame, text = "Send", command = self.send_message)
         button.pack(side = tk.RIGHT)
 
-        # Optional: Add an emoji button
+        # NEED to be Fixed: Add an emoji button
         emoji_button = tk.Button(frame, text="😊", command=self.show_emoji_picker)
         emoji_button.pack(side=tk.RIGHT, padx=5)
 
@@ -75,16 +72,47 @@ class client:
         # Tag configuration for clickable URLs
         self.chat_log.tag_config('link', foreground='blue', underline=True)
 
+
+    def read_socket(self):
+        host = '127.0.0.1'  # Or "localhost"
+        port = 5000         # Replace with your port
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((host, port))
+                while self.running:
+                    data = s.recv(1024)
+                    if not data:
+                        break
+                    self.data_queue.put(data.decode())
+        except Exception as e:
+             self.data_queue.put(f"Error: {e}")
+
+    
     def show_emoji_picker(self):
-        """Display a simple emoji picker."""
+        """Display a simple emoji picker with limited size and aligned emojis."""
         emojis = ["😊", "😂", "👍", "❤️", "😢", "😡", "✨", "🚀"]
+
         picker = tk.Toplevel(self.root)
         picker.title("Emoji Picker")
-        picker.geometry("200x100")
-        for emoji in emojis:
-            btn = tk.Button(picker, text=emoji, font=("Segoe UI Emoji", 14),
-                            command=lambda e=emoji: self.insert_emoji(e))
-            btn.pack(side=tk.LEFT, padx=2, pady=2)
+        # Set a fixed size (width x height in pixels)
+        picker.geometry("300x100")  # Adjust as needed
+        picker.resizable(False, False)  # Prevent resizing
+
+        # Create a frame to hold the emoji buttons
+        frame = tk.Frame(picker)
+        frame.pack(pady=5, padx=5)
+
+        # Use a grid layout for alignment (e.g., 4 columns)
+        cols = 4  # Number of columns
+        for i, emoji in enumerate(emojis):
+            row = i // cols  # Calculate row number
+            col = i % cols   # Calculate column number
+            btn = tk.Button(frame, text=emoji, font=("Segoe UI Emoji", 14),
+                            command=lambda e=emoji: self.insert_emoji(e),
+                            width=2, height=1)  # Fixed button size
+            btn.grid(row=row, column=col, padx=2, pady=2)
+
         picker.transient(self.root)  # Keep picker on top of main window
         picker.grab_set()  # Make it modal
 
@@ -111,92 +139,100 @@ class client:
         # Normal operations
         else:
             print(f"Username entered: {self.username}\n")
+    
+    def replace_shortcuts(self, msg):
+        """Replace emoji shortcuts with their corresponding emojis."""
+        for shortcut, emoji in self.emoji_dict.items():
+            msg = msg.replace(shortcut, emoji)
+        return msg
+    
+    def send_message(self, event=None):
+            msg = self.entry.get().strip()
+            print("Send message")
+            if msg:
+                try:
+                    msg_with_emojis = self.replace_shortcuts(msg)
+                    # Check if it's a direct message
+                    if msg_with_emojis.startswith('@'):
+                        # Extract recipient username (e.g., "@Ben" from "@Ben Hi")
+                        match = re.match(r'@(\w+)\s*(.*)', msg_with_emojis)
+                        if match:
+                            recipient, content = match.groups()
+                            # Format as DM with "DM:" prefix for server to recognize
+                            full_msg = f"DM:{recipient}:{self.username}: {content}"
+                            self.client_socket.send(full_msg.encode())
 
-
-    def send_message(self, event = None):
-        msg = self.entry.get().strip()
-        if msg:
-            try:
-                full_msg = f"{self.username}: {msg}"
-                self.client_socket.send(full_msg.encode())
-                self.display_message("You", msg)
-                self.entry.delete(0, tk.END)
-                self.entry.focus() # Fixes button delay
-            except:
-                self.display_message("System", "Failed to send message")
-
-    # def receive_message(self):
-    #     while self.running:
-    #         try:
-    #             msg = self.client_socket.recv(1024)
-    #             if not msg:
-    #                 break
-    #             # self.display_message("", msg.decode())
-    #              # Schedule UI update in the main thread to fix lag when pressing the text bar
-    #             self.root.after(0, self.display_message, "", msg.decode())
-    #         except:
-    #             break
-    #     self.root.after(0, self.display_message, "System", "[Connection lost to server]")
-    #     # self.display_message("System", "[Connection lost to server]")
-    #     self.client_socket.close()
-
+                            # Display locally as a DM
+                            self.display_message("You (to " + recipient + ")", content, is_dm=True)
+                        else:
+                            self.display_message("System", "Invalid DM format. Use @username message")
+                    else:
+                        # Regular broadcast message
+                        full_msg = f"{self.username}: {msg_with_emojis}"
+                        self.client_socket.send(full_msg.encode())
+                        self.display_message("You", msg_with_emojis)
+                    # self.entry.delete(0, tk.END)
+                    # self.entry.focus()
+                except Exception as e:
+                    print(f"Send message error: {e}")
+                    self.display_message("System", f"Failed to send message {e}")
+                
     def receive_message(self):
         while self.running:
             try:
                 msg = self.client_socket.recv(1024)
                 if not msg:
                     break
-                self.root.after(0, self.display_message, "", msg.decode())
+                decoded_msg = msg.decode()
+                print(f"Received message: {decoded_msg}")  # Debug to see what the server sends
+                # Check if it's a DM
+                if decoded_msg.startswith("DM:"):
+                    _, sender, content = decoded_msg.split(":", 2)
+                    print(f"DM from {sender} to {self.username}")  # Debug to check sender
+                    # Skip displaying if this is the user's own DM
+                    if sender == self.username:
+                        print(f"Skipping display of own DM: {content}")  # Debug to confirm skip
+                        continue
+                    self.root.after(0, self.display_message, f"{sender} (DM)", content, True)
+                else:
+                    self.root.after(0, self.display_message, "", decoded_msg)
             except (ConnectionResetError, ConnectionAbortedError):
                 self.root.after(0, self.display_message, "System", "[Connection lost to server]")
                 self.root.after(0, self.show_server_terminated_message)
                 break
-
-        # Gracefully close the application when the server disconnects
         self.root.after(0, self.on_close)
 
     def show_server_terminated_message(self):
         """Display a message informing the user that the server has terminated."""
         messagebox.showerror("Server Error", "The server has disconnected unexpectedly. Closing the client.")
 
-
-
     # need to add a fix to get rid of lag when clicking on the display text
     
     # This fixed a little of the lag
-    def display_message(self, sender, msg):
+    def display_message(self, sender, msg, is_dm = False):
     # This method is only for updating the UI. No background thread calls here.
-        self.root.after(0, self._display_message, sender, msg)
+        self.root.after(0, self._display_message, sender, msg, is_dm)
 
-    def _display_message(self, sender, msg):
-        # timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    def _display_message(self, sender, msg, is_dm = False):
+
     # Now this is the actual UI update (running safely on the main thread)
         self.chat_log.config(state='normal')
-            # Remove unwanted colons from the sender (if any)
-        # sender = sender.lstrip(':').rstrip(':')  # Remove leading and trailing colons
 
         url_pattern = r"(http://[^\s]+|https://[^\s]+|www\.[^\s]+)"
         urls = re.findall(url_pattern, msg)
 
 
         if sender:
-            self.chat_log.insert(tk.END, f"{sender}: {msg}\n")
+            tag = 'dm' if is_dm else None
+            self.chat_log.insert(tk.END, f"{sender}: {msg}\n", tag)
             # self.chat_log.insert(tk.END, f"{msg}\n")
         else:
             self.chat_log.insert(tk.END, f"{msg}\n")
-            # self.chat_log.insert(tk.END, f"{sender}: {msg}\n")
 
               # Now check for URLs and make them clickable
         for url in urls:
             self._insert_link(url)
 
-        # Check if the sender is "You", which means the message was sent by the user
-        # if sender == "You":
-        #     self.chat_log.insert(tk.END, f"{msg}\n", "sent_msg")
-        # else:
-        #     # If not, consider the message as received
-        #     self.chat_log.insert(tk.END, f"{sender}: {msg}\n", "received_msg")
-    
         self.chat_log.config(state='disabled')
         self.chat_log.yview(tk.END)
 
@@ -231,7 +267,7 @@ class client:
     def on_close(self):
         self.running = False
         try:
-                    # Notify the server that the client is disconnecting
+            # Notify the server that the client is disconnecting
             disconnect_msg = f"{self.username} has left the chat"
             self.client_socket.send(disconnect_msg.encode())  # Sending disconnect message
 
@@ -241,11 +277,11 @@ class client:
         self.root.quit()
         self.root.destroy()
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = client(root)
-    root.geometry("680x700")
-    # root.resizable(False, False)
-    root.mainloop()
+#if __name__ == "__main__":
+root = tk.Tk()
+app = client(root)
+root.geometry("680x700")
+# root.resizable(False, False)
+root.mainloop()
 
 
