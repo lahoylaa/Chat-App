@@ -5,13 +5,14 @@ import threading
 import re
 import webbrowser
 
-# Add thread
+# Main Code Running
 class client:
     def __init__(self, root, host = '127.0.0.1', port = 5020):
         self.root = root
         self.root.title(f"Chat App Client on Port: {port}")
 
         # Emoji shortcut dictionary
+        # Will be used later on can increase the size or decrease
         self.emoji_dict = {
             ":smile:": "😊",
             ":laugh:": "😂",
@@ -23,7 +24,7 @@ class client:
             ":rocket:": "🚀"
         }
 
-        # self.username = simpledialog.askstring("Username:", "", parent = self.root)
+        # Get the username
         self.get_username()
         if not self.username:
             self.root.destroy()
@@ -35,8 +36,6 @@ class client:
         try:
             self.client_socket.connect((host, port))
             self.client_socket.send(self.username.encode()) # Send the name as the first message
-            # print(f"server addr : {server_addr}")
-            # self.root.title(f"Chat App Client on Port: {server_addr}")
         except ConnectionRefusedError:
             messagebox.showerror("Server Connection Error", "Could not connect to the server")
             self.root.destroy()
@@ -44,54 +43,44 @@ class client:
         
     
         # User Interface
+
+        # Emoji Setup
         emoji_font = ("Segoe UI Emoji", 12)  # Adjust size as needed
         self.chat_log = scrolledtext.ScrolledText(root, state = 'disabled', wrap = tk.WORD, height = 20, font = emoji_font)
         self.chat_log.pack(padx = 10, pady = (10, 5), fill = tk.BOTH, expand = True)
+        # Tag configuration for clickable URLs
+        self.chat_log.tag_config('link', foreground='blue', underline=True)
 
+        # Frame for text bar input
         frame = tk.Frame(root)
         frame.pack(padx = 10, pady = (0, 10), fill = tk.X)
 
+        # Text bar input
         self.entry = tk.Entry(frame)
         self.entry.focus()  # Automatically focus the input box after the username prompt.
         self.entry.pack(side = tk.LEFT, fill = tk.X, expand = True, padx = (0, 5))
         self.entry.bind("<Return>", self.send_message)
 
+        # Send Button 
         button = tk.Button(frame, text = "Send", command = self.send_message)
         button.pack(side = tk.RIGHT)
 
-        # NEED to be Fixed: Add an emoji button
+        # Emoji Button
         emoji_button = tk.Button(frame, text="😊", command=self.show_emoji_picker)
         emoji_button.pack(side=tk.RIGHT, padx=5)
 
+        # Threads
         self.running = True
         threading.Thread(target = self.receive_message, daemon = True).start()
 
         # Close
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-
-        # Tag configuration for clickable URLs
-        self.chat_log.tag_config('link', foreground='blue', underline=True)
-
-
-    def read_socket(self):
-        host = '127.0.0.1'  # Or "localhost"
-        port = 5000         # Replace with your port
-
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((host, port))
-                while self.running:
-                    data = s.recv(1024)
-                    if not data:
-                        break
-                    self.data_queue.put(data.decode())
-        except Exception as e:
-             self.data_queue.put(f"Error: {e}")
-
     
+
+    # Function: To output the emoji options
     def show_emoji_picker(self):
-        """Display a simple emoji picker with limited size and aligned emojis."""
-        emojis = ["😊", "😂", "👍", "❤️", "😢", "😡", "✨", "🚀"]
+
+        emojis = list(self.emoji_dict.values())  # Get only emojis
 
         picker = tk.Toplevel(self.root)
         picker.title("Emoji Picker")
@@ -116,20 +105,15 @@ class client:
         picker.transient(self.root)  # Keep picker on top of main window
         picker.grab_set()  # Make it modal
 
+    # Function
     def insert_emoji(self, emoji):
-        """Insert the selected emoji into the entry field."""
         self.entry.insert(tk.END, emoji)
         self.entry.focus()
-
-    def get_local_ip(self):
-        """Get the local IP address of the machine."""
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))  # Google's public DNS server
-        local_ip = s.getsockname()[0]
-        s.close()
-        return local_ip
     
+    # Function: Prompts the user for a username. Closes the program if they dont enter
     def get_username(self):
+
+        # Prompt for the username
         self.username = simpledialog.askstring("Username", "Enter a username", parent = self.root)
 
         # No username entered close the program
@@ -138,14 +122,16 @@ class client:
 
         # Normal operations
         else:
+            # Debug: make sure we process input correctly
             print(f"Username entered: {self.username}\n")
     
+    # Function: Replaces the text input for the emojis. Must match dictionary definition
     def replace_shortcuts(self, msg):
-        """Replace emoji shortcuts with their corresponding emojis."""
         for shortcut, emoji in self.emoji_dict.items():
             msg = msg.replace(shortcut, emoji)
         return msg
     
+    # Function: Sends the msg to the server. Iterates through for DMs
     def send_message(self, event=None):
             msg = self.entry.get().strip()
             print("Send message")
@@ -161,7 +147,6 @@ class client:
                             # Format as DM with "DM:" prefix for server to recognize
                             full_msg = f"DM:{recipient}:{self.username}: {content}"
                             self.client_socket.send(full_msg.encode())
-
                             # Display locally as a DM
                             self.display_message("You (to " + recipient + ")", content, is_dm=True)
                         else:
@@ -171,12 +156,13 @@ class client:
                         full_msg = f"{self.username}: {msg_with_emojis}"
                         self.client_socket.send(full_msg.encode())
                         self.display_message("You", msg_with_emojis)
-                    # self.entry.delete(0, tk.END)
-                    # self.entry.focus()
+                    
+                    self.entry.delete(0, tk.END) # clears the text bar input
                 except Exception as e:
                     print(f"Send message error: {e}")
                     self.display_message("System", f"Failed to send message {e}")
-                
+    
+    # Function: 
     def receive_message(self):
         while self.running:
             try:
@@ -202,13 +188,12 @@ class client:
                 break
         self.root.after(0, self.on_close)
 
+    # Function: Shows server connection failure
     def show_server_terminated_message(self):
         """Display a message informing the user that the server has terminated."""
         messagebox.showerror("Server Error", "The server has disconnected unexpectedly. Closing the client.")
-
-    # need to add a fix to get rid of lag when clicking on the display text
     
-    # This fixed a little of the lag
+    # Function:
     def display_message(self, sender, msg, is_dm = False):
     # This method is only for updating the UI. No background thread calls here.
         self.root.after(0, self._display_message, sender, msg, is_dm)
