@@ -213,7 +213,7 @@ class client:
             # self.chat_log.insert(tk.END, f"{msg}\n")
         else:
             self.chat_log.insert(tk.END, f"{msg}\n")
-
+        #fixing ui test
               # Now check for URLs and make them clickable
         for url in urls:
             self._insert_link(url)
