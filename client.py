@@ -199,7 +199,8 @@ class client:
         self.root.after(0, self._display_message, sender, msg, is_dm)
 
     def _display_message(self, sender, msg, is_dm = False):
-
+        self.chat_log.tag_config('sent_msg', foreground='white', background='green4')
+        self.chat_log.tag_config('recv_msg', foreground='blue4')
     # Now this is the actual UI update (running safely on the main thread)
         self.chat_log.config(state='normal')
 
@@ -208,11 +209,12 @@ class client:
 
 
         if sender:
-            tag = 'dm' if is_dm else None
+            tag = ('dm', 'sent_msg') if is_dm else 'sent_msg'
             self.chat_log.insert(tk.END, f"{sender}: {msg}\n", tag)
             # self.chat_log.insert(tk.END, f"{msg}\n")
         else:
-            self.chat_log.insert(tk.END, f"{msg}\n")
+            tag = 'recv_msg'
+            self.chat_log.insert(tk.END, f"{msg}\n", tag)
         #fixing ui test
               # Now check for URLs and make them clickable
         for url in urls:
